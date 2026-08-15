@@ -38,7 +38,9 @@ way to register new locomotives on the CS-105, one at a time.
 The "Clear old NCE consist" section is unrelated to Traction/LCC - it
 uses ordinary Program on Main (Ops Mode Programming) to write CV19=0 on
 a given locomotive, clearing any leftover Decoder Assisted Consist
-setting from the old NCE setup so it doesn't linger and interfere.
+setting from the old NCE setup so it doesn't linger and interfere. On
+success it briefly takes the throttle and honks the horn (F2) 3 times
+as an audible confirmation, then releases it again.
 """
 import jarray
 from javax.swing import (JFrame, JPanel, JButton, JComboBox, JLabel, JList,
@@ -147,22 +149,82 @@ class CvClearListener(jmri.ProgListener):
     called back on a non-EDT thread, so hop to the EDT before touching
     any Swing components."""
 
-    def __init__(self, frame, programmer, label):
+    def __init__(self, frame, programmer, label, node_id):
         self.frame = frame
         self.programmer = programmer
         self.label = label
+        self.node_id = node_id
 
     def programmingOpReply(self, value, status):
         SwingUtilities.invokeLater(lambda: self._handle(value, status))
 
     def _handle(self, value, status):
         if status == jmri.ProgListener.OK:
-            self.frame.cvStatusLabel.setText("CV19 cleared on %s." % self.label)
+            self.frame.cvStatusLabel.setText("CV19 cleared on %s - honking horn..." % self.label)
+            honker = HornHonker(self.frame.iface, self.node_id, self.label,
+                                 self.frame.cvStatusLabel.setText)
+            honker.start()
         else:
             self.frame.cvStatusLabel.setText(
                 "CV19 write to %s failed (status %d)." % (self.label, status))
         self.frame.clearCvButton.setEnabled(True)
         self.frame._releaseCvProgrammer()
+
+
+class HornHonker(PropertyChangeListener):
+    """Honks the horn (function F2, NCE/most decoders' default horn/whistle
+    assignment) 3 times on a locomotive, as a little audible confirmation
+    that its CV19 was cleared. Briefly takes controller assignment (the
+    only way to send function commands over Traction), then releases it
+    again - same as a throttle briefly grabbing a loco to blow the horn.
+    Timing uses a non-blocking javax.swing.Timer, never a blocking sleep,
+    since this runs on JMRI's GUI thread."""
+
+    HORN_FN = 2
+    ON_MS = 400
+    OFF_MS = 250
+    HONKS = 3
+
+    def __init__(self, iface, node_id, label, status_callback):
+        self.iface = iface
+        self.node_id = node_id
+        self.label = label
+        self.status_callback = status_callback
+        self.throttle = None
+        self.step = 0
+
+    def start(self):
+        self.throttle = TractionThrottle(self.iface)
+        self.throttle.addPropertyChangeListener(self)
+        node = RemoteTrainNode(self.node_id, self.iface)
+        self.throttle.start(node)
+
+    def propertyChange(self, evt):
+        SwingUtilities.invokeLater(lambda: self._handle(evt))
+
+    def _handle(self, evt):
+        if evt.getPropertyName() == TractionThrottle.UPDATE_PROP_ENABLED:
+            if self.throttle.getEnabled():
+                self._nextStep()
+
+    def _nextStep(self):
+        totalSteps = self.HONKS * 2  # on, off, on, off, on, off
+        if self.step >= totalSteps:
+            self._finish()
+            return
+        hornOn = (self.step % 2 == 0)
+        self.throttle.getFunction(self.HORN_FN).set(hornOn)
+        delay = self.ON_MS if hornOn else self.OFF_MS
+        self.step += 1
+        timer = Timer(delay, _TimerCallback(self._nextStep))
+        timer.setRepeats(False)
+        timer.start()
+
+    def _finish(self):
+        self.throttle.getFunction(self.HORN_FN).set(False)
+        self.throttle.removePropertyChangeListener(self)
+        self.throttle.release()
+        self.status_callback("CV19 cleared on %s (horn honked)." % self.label)
 
 
 class _TimerCallback(ActionListener):
@@ -539,7 +601,8 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         self._activeCvProgrammer = programmer
         self.clearCvButton.setEnabled(False)
         self.cvStatusLabel.setText("Writing CV19=0 to %s ..." % label)
-        listener = CvClearListener(self, programmer, label)
+        nodeID = node_id_for(addr, is_long)
+        listener = CvClearListener(self, programmer, label, nodeID)
         try:
             programmer.writeCV("19", 0, listener)
         except jmri.ProgrammerException as ex:
