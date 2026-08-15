@@ -45,7 +45,7 @@ as an audible confirmation, then releases it again.
 import jarray
 from javax.swing import (JFrame, JPanel, JButton, JComboBox, JLabel, JList,
                           DefaultListModel, JScrollPane, JCheckBox, JTextField,
-                          BoxLayout, SwingUtilities, BorderFactory,
+                          JTextArea, BoxLayout, SwingUtilities, BorderFactory,
                           ListSelectionModel, JOptionPane, Timer)
 from java.awt import BorderLayout, FlowLayout, GridLayout, Dimension
 from java.awt.event import ActionListener
@@ -55,6 +55,46 @@ from org.openlcb import NodeID, MessageDecoder
 from org.openlcb.implementations.throttle import TractionThrottle, RemoteTrainNode
 from org.openlcb.messages import TractionControlRequestMessage, TractionControlReplyMessage
 from jmri.jmrix.can import CanSystemConnectionMemo
+
+
+INSTRUCTIONS_TEXT = """HOW TO BUILD A CONSIST
+
+1. In "Lead locomotive", pick the lead unit from the roster dropdown, or
+   type its DCC address into the manual field just below it (check/uncheck
+   "Long address" to match) - manual entry wins if it's filled in.
+2. Click "Assign as Lead". Status will show "Enabled" once JMRI has
+   control, and the member list will show a "LEAD: ..." row plus anything
+   already consisted to it.
+3. In "Add locomotive", pick (or manually enter) the next unit to attach.
+   Check "Reverse" if it runs backwards relative to the lead, and
+   "Respond to F0" if you want it to react to the lead's headlight
+   function too.
+4. Click "Add to Consist". It appears in the member list once attached.
+5. Repeat steps 3-4 for any further units.
+6. To remove one unit later, select it in the member list and click
+   "Remove Selected" (the "LEAD:" row itself can't be removed this way -
+   use Release Lead instead if you want to fully let go of the consist).
+7. Click "Release Lead" when you're done. This only gives up JMRI's
+   control of the lead - the consist itself stays intact on the CS-105 and
+   works from any throttle, exactly as if a UWT throttle had built it.
+
+To just check what's already consisted to a locomotive without taking
+control of it, use "Read Consist" instead of Assign as Lead in step 2.
+
+HOW TO CLEAR AN OLD NCE CONSIST (CV19)
+
+If a locomotive still has a CV19 value left over from the old NCE setup,
+clear it before/while migrating it to CS-105 consisting:
+
+1. Scroll to "Clear old NCE consist".
+2. Pick the locomotive from the "Locomotive" dropdown, or type its DCC
+   address into the manual field below.
+3. Click "Clear CV19", then confirm the dialog (this is a real
+   Program-on-Main write to the layout).
+4. "CV19 status" will show progress, then "CV19 cleared on ..." once
+   done - the locomotive will also honk its horn 3 times as an audible
+   confirmation.
+"""
 
 
 def to_signed_byte(v):
