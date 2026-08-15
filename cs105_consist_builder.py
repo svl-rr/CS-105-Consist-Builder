@@ -17,6 +17,9 @@ Node IDs are computed the same way as elsewhere in this project:
 (matches jmri.jmrix.symbolicprog.TcsUploadAction's node ID scheme, and
 confirmed earlier this session against the CS-105's own network tree).
 
+Click the "Instructions" button in the window itself for the full
+step-by-step walkthrough (also reproduced below and in README.md).
+
 Usage:
   1. Panels > Run Script..., pick this file.
   2. Pick a lead locomotive (roster dropdown, or type its DCC address
@@ -378,6 +381,10 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         root.setLayout(BoxLayout(root, BoxLayout.Y_AXIS))
         root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
 
+        helpPanel = JPanel(FlowLayout(FlowLayout.RIGHT))
+        helpPanel.add(JButton("Instructions", actionPerformed=self.onShowInstructions))
+        root.add(helpPanel)
+
         # --- Lead section ---
         leadPanel = JPanel(FlowLayout(FlowLayout.LEFT))
         leadPanel.add(JLabel("Lead locomotive:"))
@@ -482,6 +489,17 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         self.setLocationRelativeTo(None)
 
     # --- button handlers ---
+
+    def onShowInstructions(self, event):
+        textArea = JTextArea(INSTRUCTIONS_TEXT)
+        textArea.setEditable(False)
+        textArea.setLineWrap(False)
+        textArea.setFont(JLabel().getFont())
+        scroll = JScrollPane(textArea)
+        scroll.setPreferredSize(Dimension(560, 420))
+        JOptionPane.showMessageDialog(
+            self, scroll, "CS-105 Consist Builder - Instructions",
+            JOptionPane.PLAIN_MESSAGE)
 
     def onAssign(self, event):
         manual = parse_manual_address(self.leadAddrField, self.leadLongCheck)

@@ -24,7 +24,9 @@ but less capable) kind of consist.
 ## Running it
 
 In JMRI: **Panels → Run Script...**, then pick `cs105_consist_builder.py`.
-It opens its own window, separate from JMRI's other tools.
+It opens its own window, separate from JMRI's other tools. The
+**Instructions** button in the top-right of that window reproduces the
+walkthroughs below, so they're on hand without leaving JMRI.
 
 ## How to build a consist
 
