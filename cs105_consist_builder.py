@@ -20,33 +20,50 @@ confirmed earlier this session against the CS-105's own network tree).
 Click the "Instructions" button in the window itself for the full
 step-by-step walkthrough (also reproduced below and in README.md).
 
+Locomotives are always picked by typing their DCC address directly - there
+is no roster dropdown.
+
 Usage:
   1. Panels > Run Script..., pick this file.
-  2. Pick a lead locomotive (roster dropdown, or type its DCC address
-     directly into the manual field - manual takes priority if filled
-     in), click "Assign as Lead" (this also shows whatever's already
-     consisted to it, if anything).
-  3. Pick another locomotive the same way, set Reverse/F0 as needed,
-     "Add to Consist".
+  2. Type the lead locomotive's DCC address, set Long address to match,
+     click "Assign as Lead" (this also shows whatever's already consisted
+     to it, if anything).
+  3. Type another locomotive's address, set Reverse/F0 as needed,
+     "Add to Consist". Each time a unit is added, its CV19 is also
+     automatically cleared (CV19=0 sent CV19_REPEAT_COUNT times via
+     Program on Main, to remove any leftover Advanced Consist setting),
+     and its horn honks 3 times (0.5s each) once that's done.
+     This does NOT happen for the lead itself - see "Clear CV19 on Entire
+     Consist" below.
   4. Repeat for more members. "Remove Selected" / "Refresh List" as needed.
   5. "Release Lead" when done - this only releases JMRI's own control
      access, it does NOT break up the consist itself (consists persist
      on the CS-105 independent of any throttle's connection).
+  6. "New Consist" clears every address/option field back to blank/default,
+     for starting on a fresh consist. It does not release an active
+     throttle assignment or touch the consist member list.
 
 Note: assigning a throttle to a locomotive that has never been addressed
 before likely auto-creates its CS-105 virtual node as a side effect (this
 is presumably how UWT throttles do it too) - so using this tool is also a
 way to register new locomotives on the CS-105, one at a time.
 
-The "Clear old NCE consist" section is unrelated to Traction/LCC - it
-uses ordinary Program on Main (Ops Mode Programming) to write CV19=0 on
-a given locomotive, clearing any leftover Decoder Assisted Consist
-setting from the old NCE setup so it doesn't linger and interfere. On
-success it briefly takes the throttle and honks the horn (F2) 3 times
-as an audible confirmation, then releases it again.
+"Clear CV19 on Entire Consist" is unrelated to Traction/LCC - it uses
+ordinary Program on Main (Ops Mode Programming) to write CV19=0, sent
+CV19_REPEAT_COUNT times in a row, on the lead and every attached member
+currently shown in the consist list - one engine at a time. Each engine's
+horn honks 3 times (0.5s each) once its writes finish, as an audible
+confirmation.
+This clears any leftover Advanced Consist setting so it doesn't linger
+and interfere with CS-105 consisting.
+
+The horn honk sends TractionControlRequestMessage SET_FN messages to the
+target directly (see HornHonker) rather than going through
+TractionThrottle's VersionedValue-based function API, which did not
+reliably produce an outbound message in testing.
 """
 import jarray
-from javax.swing import (JFrame, JPanel, JButton, JComboBox, JLabel, JList,
+from javax.swing import (JFrame, JPanel, JButton, JLabel, JList,
                           DefaultListModel, JScrollPane, JCheckBox, JTextField,
                           JTextArea, BoxLayout, SwingUtilities, BorderFactory,
                           ListSelectionModel, JOptionPane, Timer)
@@ -62,17 +79,23 @@ from jmri.jmrix.can import CanSystemConnectionMemo
 
 INSTRUCTIONS_TEXT = """HOW TO BUILD A CONSIST
 
-1. In "Lead locomotive", pick the lead unit from the roster dropdown, or
-   type its DCC address into the manual field just below it (check/uncheck
-   "Long address" to match) - manual entry wins if it's filled in.
+Locomotives are always picked by typing their DCC address - there is no
+roster dropdown.
+
+1. Type the lead unit's DCC address into "Lead locomotive DCC address",
+   and check/uncheck "Long address" to match.
 2. Click "Assign as Lead". Status will show "Enabled" once JMRI has
    control, and the member list will show a "LEAD: ..." row plus anything
    already consisted to it.
-3. In "Add locomotive", pick (or manually enter) the next unit to attach.
-   Check "Reverse" if it runs backwards relative to the lead, and
-   "Respond to F0" if you want it to react to the lead's headlight
-   function too.
+3. Type the next unit's DCC address into "Add locomotive DCC address"
+   (and its Long address checkbox). Check "Reverse" if it runs backwards
+   relative to the lead, and "Respond to F0" if you want it to react to
+   the lead's headlight function too.
 4. Click "Add to Consist". It appears in the member list once attached.
+   Its CV19 is also automatically cleared (CV19=0 sent 3 times via
+   Program on Main), and its horn honks 3 times (0.5 seconds each) once
+   that finishes - this does NOT happen for the lead itself, only units
+   added this way.
 5. Repeat steps 3-4 for any further units.
 6. To remove one unit later, select it in the member list and click
    "Remove Selected" (the "LEAD:" row itself can't be removed this way -
@@ -84,19 +107,29 @@ INSTRUCTIONS_TEXT = """HOW TO BUILD A CONSIST
 To just check what's already consisted to a locomotive without taking
 control of it, use "Read Consist" instead of Assign as Lead in step 2.
 
-HOW TO CLEAR AN OLD NCE CONSIST (CV19)
+Click "New Consist" (top right) at any time to clear all the address and
+option fields back to blank/default, ready for building a fresh consist.
+This does not release an active lead assignment or clear the member list -
+use "Release Lead" for that.
 
-If a locomotive still has a CV19 value left over from the old NCE setup,
-clear it before/while migrating it to CS-105 consisting:
+HOW TO CLEAR CV19 ON THE WHOLE CONSIST
 
-1. Scroll to "Clear old NCE consist".
-2. Pick the locomotive from the "Locomotive" dropdown, or type its DCC
-   address into the manual field below.
-3. Click "Clear CV19", then confirm the dialog (this is a real
-   Program-on-Main write to the layout).
-4. "CV19 status" will show progress, then "CV19 cleared on ..." once
-   done - the locomotive will also honk its horn 3 times as an audible
-   confirmation.
+If any locomotives still have a CV19 value left over from an old Advanced
+Consist setup, clear it on all of them at once - the lead plus every
+attached member currently shown in the consist list:
+
+1. Build or read the consist first (Assign as Lead / Add to Consist, or
+   Read Consist).
+2. Click "Clear CV19 on Entire Consist".
+3. Each engine is processed one at a time: CV19=0 is written 3 times in a
+   row to it via Program on Main, then its horn honks 3 times (0.5 seconds
+   each) as an audible confirmation, before moving on to the next engine.
+4. "CV19 status" shows progress throughout, ending with "CV19 cleared on
+   all N engine(s) in the consist."
+
+Note: units added via "Add to Consist" already get this same treatment
+automatically as they're added - this button is for clearing the lead
+too, or for re-running it across the whole consist at once.
 """
 
 
@@ -132,29 +165,20 @@ def is_plausible_dcc_node(node_id):
 
 
 class RosterIndex(object):
-    """Address/name lookups over the JMRI roster, for combo boxes and
-    resolving consist member NodeIDs back to friendly names."""
+    """Address -> roster name lookup, used to show a friendly name next to
+    each consist member's DCC address. Locomotives are always picked by
+    manually typing a DCC address (no roster picker in the UI), but the
+    roster is still used here purely for display."""
 
     def __init__(self):
         roster = jmri.jmrit.roster.Roster.getDefault()
-        self.entries = list(roster.getAllEntries())
         self.by_addr = {}
-        self.labels = []
-        self.label_to_entry = {}
-        for re in self.entries:
+        for re in roster.getAllEntries():
             try:
                 addr = int(re.getDccAddress())
             except Exception:
                 continue
-            is_long = re.isLongAddress()
-            self.by_addr[(addr, is_long)] = re
-            label = "%s  (%d%s)" % (re.getId(), addr, "L" if is_long else "S")
-            self.labels.append(label)
-            self.label_to_entry[label] = re
-        self.labels.sort()
-
-    def entry_for_label(self, label):
-        return self.label_to_entry.get(label)
+            self.by_addr[(addr, re.isLongAddress())] = re
 
     def name_for_node(self, node_id):
         addr, is_long = decode_node_id(node_id)
@@ -173,8 +197,8 @@ class RosterIndex(object):
 
 
 def parse_manual_address(text_field, long_checkbox):
-    """Returns (addr, is_long) if the manual entry field has a valid
-    address typed in, else None (meaning: fall back to the roster combo)."""
+    """Returns (addr, is_long) if the field has a valid DCC address typed
+    in (1-9999), else None."""
     text = text_field.getText().strip()
     if not text:
         return None
@@ -187,44 +211,77 @@ def parse_manual_address(text_field, long_checkbox):
     return addr, long_checkbox.isSelected()
 
 
-class CvClearListener(jmri.ProgListener):
-    """Handles the async reply from a Program-on-Main CV19 write. May be
-    called back on a non-EDT thread, so hop to the EDT before touching
-    any Swing components."""
+CV19_REPEAT_COUNT = 3  # CV19=0 is sent this many times in a row per engine
 
-    def __init__(self, frame, programmer, label, node_id):
+
+class CvClearListener(jmri.ProgListener):
+    """Handles the async reply from one Program-on-Main CV19=0 write, and
+    chains up to CV19_REPEAT_COUNT total writes for the same locomotive
+    (reusing the same programmer) before honking its horn once and calling
+    on_done(). May be called back on a non-EDT thread, so hop to the EDT
+    before touching any Swing components."""
+
+    def __init__(self, frame, programmer, label, node_id, writes_remaining, on_done):
         self.frame = frame
         self.programmer = programmer
         self.label = label
         self.node_id = node_id
+        self.writes_remaining = writes_remaining
+        self.on_done = on_done
 
     def programmingOpReply(self, value, status):
-        SwingUtilities.invokeLater(lambda: self._handle(value, status))
+        SwingUtilities.invokeLater(lambda: self._handle(status))
 
-    def _handle(self, value, status):
-        if status == jmri.ProgListener.OK:
-            self.frame.cvStatusLabel.setText("CV19 cleared on %s - honking horn..." % self.label)
-            honker = HornHonker(self.frame.iface, self.node_id, self.label,
-                                 self.frame.cvStatusLabel.setText)
-            honker.start()
-        else:
+    def _handle(self, status):
+        if status != jmri.ProgListener.OK:
             self.frame.cvStatusLabel.setText(
                 "CV19 write to %s failed (status %d)." % (self.label, status))
-        self.frame.clearCvButton.setEnabled(True)
+            self.frame._releaseCvProgrammer()
+            self.on_done()
+            return
+
+        if self.writes_remaining > 0:
+            self.frame.cvStatusLabel.setText(
+                "CV19=0 written to %s (%d more write(s))..." %
+                (self.label, self.writes_remaining))
+            listener = CvClearListener(self.frame, self.programmer, self.label, self.node_id,
+                                        self.writes_remaining - 1, self.on_done)
+            try:
+                self.programmer.writeCV("19", 0, listener)
+            except jmri.ProgrammerException as ex:
+                self.frame.cvStatusLabel.setText("Error: %s" % ex)
+                self.frame._releaseCvProgrammer()
+                self.on_done()
+            return
+
+        self.frame.cvStatusLabel.setText(
+            "CV19 cleared on %s (sent %d times) - honking horn..." %
+            (self.label, CV19_REPEAT_COUNT))
         self.frame._releaseCvProgrammer()
+        honker = HornHonker(self.frame.iface, self.node_id, self.label,
+                             self.frame.cvStatusLabel.setText)
+        honker.start()
+        self.on_done()
 
 
 class HornHonker(PropertyChangeListener):
-    """Honks the horn (function F2, NCE/most decoders' default horn/whistle
-    assignment) 3 times on a locomotive, as a little audible confirmation
-    that its CV19 was cleared. Briefly takes controller assignment (the
+    """Honks the horn (function F2, the standard NMRA/decoder horn-whistle
+    assignment) 3 times on a locomotive, each honk held for 0.5 seconds
+    (ON_MS), as a little audible confirmation that its CV19 was cleared.
+    Briefly takes controller assignment (the
     only way to send function commands over Traction), then releases it
     again - same as a throttle briefly grabbing a loco to blow the horn.
     Timing uses a non-blocking javax.swing.Timer, never a blocking sleep,
-    since this runs on JMRI's GUI thread."""
+    since this runs on JMRI's GUI thread.
+
+    Sends TractionControlRequestMessage.createSetFn(...) directly rather
+    than going through TractionThrottle.getFunction(fn).set(...) - the
+    VersionedValue wrapper that goes through didn't reliably produce an
+    outbound SET_FN message in testing, so this talks to the interface
+    directly instead, the same way ConsistReader/addToConsist etc. do."""
 
     HORN_FN = 2
-    ON_MS = 400
+    ON_MS = 500
     OFF_MS = 250
     HONKS = 3
 
@@ -250,13 +307,18 @@ class HornHonker(PropertyChangeListener):
             if self.throttle.getEnabled():
                 self._nextStep()
 
+    def _setHorn(self, on):
+        m = TractionControlRequestMessage.createSetFn(
+            self.iface.getNodeId(), self.node_id, self.HORN_FN, 1 if on else 0)
+        self.iface.getOutputConnection().put(m, self.throttle)
+
     def _nextStep(self):
         totalSteps = self.HONKS * 2  # on, off, on, off, on, off
         if self.step >= totalSteps:
             self._finish()
             return
         hornOn = (self.step % 2 == 0)
-        self.throttle.getFunction(self.HORN_FN).set(hornOn)
+        self._setHorn(hornOn)
         delay = self.ON_MS if hornOn else self.OFF_MS
         self.step += 1
         timer = Timer(delay, _TimerCallback(self._nextStep))
@@ -264,10 +326,10 @@ class HornHonker(PropertyChangeListener):
         timer.start()
 
     def _finish(self):
-        self.throttle.getFunction(self.HORN_FN).set(False)
+        self._setHorn(False)
         self.throttle.removePropertyChangeListener(self)
         self.throttle.release()
-        self.status_callback("CV19 cleared on %s (horn honked)." % self.label)
+        self.status_callback("%s: horn honked %d times." % (self.label, self.HONKS))
 
 
 class _TimerCallback(ActionListener):
@@ -382,27 +444,22 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
 
         helpPanel = JPanel(FlowLayout(FlowLayout.RIGHT))
+        helpPanel.add(JButton("New Consist", actionPerformed=self.onNewConsist))
         helpPanel.add(JButton("Instructions", actionPerformed=self.onShowInstructions))
         root.add(helpPanel)
 
         # --- Lead section ---
         leadPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        leadPanel.add(JLabel("Lead locomotive:"))
-        self.leadCombo = JComboBox(self.roster.labels)
-        leadPanel.add(self.leadCombo)
+        leadPanel.add(JLabel("Lead locomotive DCC address:"))
+        self.leadAddrField = JTextField(6)
+        leadPanel.add(self.leadAddrField)
+        self.leadLongCheck = JCheckBox("Long address", True)
+        leadPanel.add(self.leadLongCheck)
         self.assignButton = JButton("Assign as Lead", actionPerformed=self.onAssign)
         leadPanel.add(self.assignButton)
         self.readConsistButton = JButton("Read Consist", actionPerformed=self.onReadConsist)
         leadPanel.add(self.readConsistButton)
         root.add(leadPanel)
-
-        leadManualPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        leadManualPanel.add(JLabel("...or enter DCC address manually:"))
-        self.leadAddrField = JTextField(6)
-        leadManualPanel.add(self.leadAddrField)
-        self.leadLongCheck = JCheckBox("Long address", True)
-        leadManualPanel.add(self.leadLongCheck)
-        root.add(leadManualPanel)
 
         statusPanel = JPanel(FlowLayout(FlowLayout.LEFT))
         statusPanel.add(JLabel("Status:"))
@@ -414,9 +471,11 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
 
         # --- Add member section ---
         addPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        addPanel.add(JLabel("Add locomotive:"))
-        self.addCombo = JComboBox(self.roster.labels)
-        addPanel.add(self.addCombo)
+        addPanel.add(JLabel("Add locomotive DCC address:"))
+        self.addAddrField = JTextField(6)
+        addPanel.add(self.addAddrField)
+        self.addLongCheck = JCheckBox("Long address", True)
+        addPanel.add(self.addLongCheck)
         self.reverseCheck = JCheckBox("Reverse")
         addPanel.add(self.reverseCheck)
         self.fn0Check = JCheckBox("Respond to F0")
@@ -425,14 +484,6 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         self.addButton.setEnabled(False)
         addPanel.add(self.addButton)
         root.add(addPanel)
-
-        addManualPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        addManualPanel.add(JLabel("...or enter DCC address manually:"))
-        self.addAddrField = JTextField(6)
-        addManualPanel.add(self.addAddrField)
-        self.addLongCheck = JCheckBox("Long address", True)
-        addManualPanel.add(self.addLongCheck)
-        root.add(addManualPanel)
 
         # --- Consist member list ---
         root.add(JLabel("Current consist members:"))
@@ -456,23 +507,13 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         root.add(btnPanel)
 
         root.add(JLabel(" "))
-        root.add(JLabel("Clear old NCE consist (sets CV19 to 0 via Program on Main):"))
+        root.add(JLabel("Clear old Advanced Consist: writes CV19=0 (x%d) on the lead and every"
+                         " attached member above, via Program on Main:" % CV19_REPEAT_COUNT))
 
         cvPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        cvPanel.add(JLabel("Locomotive:"))
-        self.cvCombo = JComboBox(self.roster.labels)
-        cvPanel.add(self.cvCombo)
-        self.clearCvButton = JButton("Clear CV19", actionPerformed=self.onClearCv19)
+        self.clearCvButton = JButton("Clear CV19 on Entire Consist", actionPerformed=self.onClearCv19)
         cvPanel.add(self.clearCvButton)
         root.add(cvPanel)
-
-        cvManualPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        cvManualPanel.add(JLabel("...or enter DCC address manually:"))
-        self.cvAddrField = JTextField(6)
-        cvManualPanel.add(self.cvAddrField)
-        self.cvLongCheck = JCheckBox("Long address", True)
-        cvManualPanel.add(self.cvLongCheck)
-        root.add(cvManualPanel)
 
         cvStatusPanel = JPanel(FlowLayout(FlowLayout.LEFT))
         cvStatusPanel.add(JLabel("CV19 status:"))
@@ -483,12 +524,24 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         self._consistEntries = []
         self._activeCvProgrammer = None
         self.leadLabel = None
+        self.leadNodeID = None
 
         self.setContentPane(root)
         self.pack()
         self.setLocationRelativeTo(None)
 
     # --- button handlers ---
+
+    def onNewConsist(self, event):
+        """Clears all address/option entry fields back to their defaults.
+        Does not touch an active throttle assignment or the current
+        consist member list - use Release Lead for that."""
+        self.leadAddrField.setText("")
+        self.leadLongCheck.setSelected(True)
+        self.addAddrField.setText("")
+        self.addLongCheck.setSelected(True)
+        self.reverseCheck.setSelected(False)
+        self.fn0Check.setSelected(False)
 
     def onShowInstructions(self, event):
         textArea = JTextArea(INSTRUCTIONS_TEXT)
@@ -503,15 +556,10 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
 
     def onAssign(self, event):
         manual = parse_manual_address(self.leadAddrField, self.leadLongCheck)
-        if manual is not None:
-            addr, is_long = manual
-        else:
-            label = self.leadCombo.getSelectedItem()
-            re = self.roster.entry_for_label(label)
-            if re is None:
-                return
-            addr = int(re.getDccAddress())
-            is_long = re.isLongAddress()
+        if manual is None:
+            self.statusLabel.setText("Enter a valid DCC address (1-9999) first.")
+            return
+        addr, is_long = manual
         nodeID = node_id_for(addr, is_long)
 
         if self.throttle is not None:
@@ -524,23 +572,15 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         node = RemoteTrainNode(nodeID, self.iface)
         self.throttle.start(node)
         self.leadLabel = "%d%s" % (addr, "L" if is_long else "S")
-        if manual is None:
-            self.leadLabel = "%s (%s)" % (re.getId(), self.leadLabel)
+        self.leadNodeID = nodeID
 
     def onReadConsist(self, event):
         manual = parse_manual_address(self.leadAddrField, self.leadLongCheck)
-        if manual is not None:
-            addr, is_long = manual
-            label = "addr %d%s" % (addr, "L" if is_long else "S")
-        else:
-            selLabel = self.leadCombo.getSelectedItem()
-            re = self.roster.entry_for_label(selLabel)
-            if re is None:
-                return
-            addr = int(re.getDccAddress())
-            is_long = re.isLongAddress()
-            label = "%s (%d%s)" % (re.getId(), addr, "L" if is_long else "S")
-
+        if manual is None:
+            self.statusLabel.setText("Enter a valid DCC address (1-9999) first.")
+            return
+        addr, is_long = manual
+        label = "addr %d%s" % (addr, "L" if is_long else "S")
         nodeID = node_id_for(addr, is_long)
 
         # A read-only display shouldn't coexist with a stale active/editable
@@ -560,6 +600,7 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         def onComplete(entries):
             self.readConsistButton.setEnabled(True)
             self.leadLabel = label + "  [read-only - Assign as Lead to edit]"
+            self.leadNodeID = nodeID
             realEntries = [(n, f) for n, f in entries if is_plausible_dcc_node(n)]
             self._consistEntries = [_Entry(n, f) for n, f in realEntries]
             self._renderConsistList()
@@ -578,15 +619,11 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         if self.throttle is None or not self.throttle.getEnabled():
             return
         manual = parse_manual_address(self.addAddrField, self.addLongCheck)
-        if manual is not None:
-            addr, is_long = manual
-        else:
-            label = self.addCombo.getSelectedItem()
-            re = self.roster.entry_for_label(label)
-            if re is None:
-                return
-            addr = int(re.getDccAddress())
-            is_long = re.isLongAddress()
+        if manual is None:
+            self.statusLabel.setText("Enter a valid DCC address (1-9999) to add first.")
+            return
+        addr, is_long = manual
+        label = "addr %d%s" % (addr, "L" if is_long else "S")
         nodeID = node_id_for(addr, is_long)
         flags = 0
         if self.reverseCheck.isSelected():
@@ -594,6 +631,12 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         if self.fn0Check.isSelected():
             flags |= TractionThrottle.CONSIST_FLAG_FN0
         self.throttle.addToConsist(nodeID, flags)
+
+        # Clear any leftover Advanced Consist CV19 setting on the newly
+        # added unit too, honking its horn once done as confirmation.
+        self.addButton.setEnabled(False)
+        self._clearCv19(addr, is_long, label, nodeID,
+                         lambda: self.addButton.setEnabled(True))
 
     def onRemove(self, event):
         idx = self.memberList.getSelectedIndex()
@@ -620,53 +663,81 @@ class ConsistBuilderFrame(JFrame, PropertyChangeListener):
         self.listModel.clear()
         self._consistEntries = []
         self.leadLabel = None
+        self.leadNodeID = None
         self.addButton.setEnabled(False)
         self.removeButton.setEnabled(False)
         self.refreshButton.setEnabled(False)
         self.releaseButton.setEnabled(False)
 
     def onClearCv19(self, event):
-        manual = parse_manual_address(self.cvAddrField, self.cvLongCheck)
-        if manual is not None:
-            addr, is_long = manual
-            label = "addr %d%s" % (addr, "L" if is_long else "S")
-        else:
-            label = self.cvCombo.getSelectedItem()
-            re = self.roster.entry_for_label(label)
-            if re is None:
-                return
-            addr = int(re.getDccAddress())
-            is_long = re.isLongAddress()
-
-        confirm = JOptionPane.showConfirmDialog(
-            self,
-            "Set CV19 to 0 on %s (address %d, %s) via Program on Main?\n"
-            "This clears any old NCE Decoder Assisted Consist setting." %
-            (label, addr, "long" if is_long else "short"),
-            "Confirm CV19 clear", JOptionPane.YES_NO_OPTION)
-        if confirm != JOptionPane.YES_OPTION:
+        """Clears CV19 (sent CV19_REPEAT_COUNT times each) on every engine
+        currently in the consist - the lead plus all attached members -
+        one engine at a time, honking each one's horn as it finishes."""
+        targets = self._gatherConsistTargets()
+        if not targets:
+            self.cvStatusLabel.setText(
+                "No consist assigned - use Assign as Lead or Read Consist first.")
             return
+        self.clearCvButton.setEnabled(False)
+        self._clearCv19Queue(targets, 0)
 
+    def _gatherConsistTargets(self):
+        """Returns [(addr, is_long, label, node_id), ...] for the lead (if
+        assigned) plus every real member currently shown in the consist
+        list."""
+        targets = []
+        if self.leadNodeID is not None:
+            addr, is_long = decode_node_id(self.leadNodeID)
+            targets.append((addr, is_long, self.leadLabel or "LEAD", self.leadNodeID))
+        for entry in self._consistEntries:
+            if entry is None:
+                continue
+            addr, is_long = decode_node_id(entry.node)
+            targets.append((addr, is_long, self.roster.name_for_node(entry.node), entry.node))
+        return targets
+
+    def _clearCv19Queue(self, targets, index):
+        if index >= len(targets):
+            self.cvStatusLabel.setText(
+                "CV19 cleared on all %d engine(s) in the consist." % len(targets))
+            self.clearCvButton.setEnabled(True)
+            return
+        addr, is_long, label, node_id = targets[index]
+        self.cvStatusLabel.setText(
+            "Clearing CV19 on engine %d of %d (%s)..." % (index + 1, len(targets), label))
+        self._clearCv19(addr, is_long, label, node_id,
+                         lambda: self._clearCv19Queue(targets, index + 1))
+
+    def _clearCv19(self, addr, is_long, label, node_id, on_done):
+        """Writes CV19=0 via Program on Main for the given locomotive
+        CV19_REPEAT_COUNT times in a row, then honks its horn on success.
+        Shared by "Clear CV19" (applied to every engine in the consist)
+        and the automatic clear that happens when adding a locomotive to a
+        consist. on_done() is always called exactly once, regardless of
+        success/failure, so callers can chain to the next engine or
+        re-enable whatever button they disabled while this was in flight."""
         apm = jmri.InstanceManager.getNullableDefault(jmri.AddressedProgrammerManager)
         if apm is None:
             self.cvStatusLabel.setText("No addressed (Program on Main) programmer available.")
+            on_done()
             return
         programmer = apm.getAddressedProgrammer(is_long, addr)
         if programmer is None:
             self.cvStatusLabel.setText("Could not get a programmer for that address.")
+            on_done()
             return
 
         self._activeCvProgrammer = programmer
-        self.clearCvButton.setEnabled(False)
-        self.cvStatusLabel.setText("Writing CV19=0 to %s ..." % label)
-        nodeID = node_id_for(addr, is_long)
-        listener = CvClearListener(self, programmer, label, nodeID)
+        self.cvStatusLabel.setText(
+            "Writing CV19=0 to %s (1 of %d)..." % (label, CV19_REPEAT_COUNT))
+        listener = CvClearListener(self, programmer, label, node_id,
+                                    CV19_REPEAT_COUNT - 1, on_done)
         try:
             programmer.writeCV("19", 0, listener)
         except jmri.ProgrammerException as ex:
             self.cvStatusLabel.setText("Error: %s" % ex)
-            self.clearCvButton.setEnabled(True)
             self._releaseCvProgrammer()
+            on_done()
 
     def _releaseCvProgrammer(self):
         if self._activeCvProgrammer is not None:

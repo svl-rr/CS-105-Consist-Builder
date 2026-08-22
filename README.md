@@ -18,8 +18,8 @@ but less capable) kind of consist.
 
 - JMRI (PanelPro or DecoderPro), with an active LCC/OpenLCB connection to
   the CS-105.
-- A JMRI roster with your locomotives' DCC addresses (used to populate the
-  dropdown pickers; not required if you only use the manual address fields).
+- Your locomotives' DCC addresses (there's no roster dropdown — every
+  locomotive is picked by typing its address directly).
 
 ## Running it
 
@@ -30,17 +30,20 @@ walkthroughs below, so they're on hand without leaving JMRI.
 
 ## How to build a consist
 
-1. In **Lead locomotive**, pick the lead unit from the roster dropdown, or
-   type its DCC address into the manual field just below (and check/uncheck
-   **Long address** to match) — manual entry wins if it's filled in.
+1. Type the lead unit's DCC address into **Lead locomotive DCC address**,
+   and check/uncheck **Long address** to match.
 2. Click **Assign as Lead**. Status will show "Enabled" once JMRI has
    control, and the member list will show a `LEAD: ...` row plus anything
    already consisted to it.
-3. In **Add locomotive**, pick (or manually enter) the next unit to attach.
-   Check **Reverse** if it runs backwards relative to the lead, and
-   **Respond to F0** if you want it to react to the lead's headlight
-   function too.
+3. Type the next unit's DCC address into **Add locomotive DCC address**
+   (and its **Long address** checkbox). Check **Reverse** if it runs
+   backwards relative to the lead, and **Respond to F0** if you want it to
+   react to the lead's headlight function too.
 4. Click **Add to Consist**. It appears in the member list once attached.
+   Its CV19 is also automatically cleared (CV19 = 0 sent 3 times via
+   Program on Main), and its horn honks 3 times (0.5 seconds each) once
+   that's done. This does **not** happen for the lead itself — see "How
+   to clear CV19 on the whole consist" below for that.
 5. Repeat steps 3–4 for any further units.
 6. To remove one unit later, select it in the member list and click
    **Remove Selected** (the `LEAD:` row itself can't be removed this way —
@@ -50,41 +53,58 @@ walkthroughs below, so they're on hand without leaving JMRI.
    works from any throttle, exactly as if a UWT throttle had built it.
 
 To just check what's already consisted to a locomotive without taking
-control of it, use **Read Consist** instead of Assign as Lead in step 2.
+control of it, use **Read Consist** instead of Assign as Lead in step 2
+(same address field).
 
-## How to clear an old NCE consist (CV19)
+Click **New Consist** (top right) at any point to clear every address and
+option field back to blank/default, ready for a fresh consist. It does
+**not** release an active lead assignment or clear the member list — use
+**Release Lead** for that.
 
-If a locomotive still has a CV19 value left over from the old NCE setup,
-clear it before/while migrating it to CS-105 consisting:
+## How to clear CV19 on the whole consist
 
-1. Scroll to **Clear old NCE consist**.
-2. Pick the locomotive from the **Locomotive** dropdown, or type its DCC
-   address into the manual field below.
-3. Click **Clear CV19**, then confirm the dialog (this is a real
-   Program-on-Main write to the layout).
-4. **CV19 status** will show progress, then "CV19 cleared on ..." once
-   done — the locomotive will also honk its horn 3 times as an audible
-   confirmation.
+If locomotives still have a CV19 value left over from an old Advanced
+Consist setup, clear it on all of them at once — the lead plus every
+attached member currently shown in the consist list:
+
+1. Build or read the consist first (Assign as Lead / Add to Consist, or
+   Read Consist).
+2. Click **Clear CV19 on Entire Consist**.
+3. Each engine is processed one at a time: CV19 = 0 is written 3 times in
+   a row to it via Program on Main, then its horn honks 3 times (0.5
+   seconds each) as an audible confirmation, before moving on to the next
+   engine.
+4. **CV19 status** shows progress throughout, ending with "CV19 cleared
+   on all N engine(s) in the consist."
+
+Units added via "Add to Consist" already get this same treatment
+automatically as they're added — this button is for clearing the lead
+too, or for re-running it across the whole consist at once.
 
 ## Features
 
 ### Building a consist
 
-- **Lead locomotive** — pick from the roster dropdown, or type a DCC
-  address directly into the manual field below it (manual takes priority
-  when filled in; leave it blank to use the dropdown).
-- **Assign as Lead** — takes control of the picked locomotive as the
-  consist's lead unit, and shows whatever's already consisted to it, if
-  anything.
-- **Read Consist** — a genuinely read-only query on the Lead
-  locomotive/address: it never sends a controller-assign command, so it
-  can't interfere with another throttle (a UWT, another JMRI session,
-  etc.) that's already running that engine. Populates the same member
-  list as Assign as Lead, marked read-only; click Assign as Lead
-  afterward if you then want to edit what you saw.
-- **Add locomotive** / **Add to Consist** — same roster-or-manual address
-  picker, plus **Reverse** and **Respond to F0** flags, to attach another
-  unit to the currently assigned lead.
+- **New Consist** — clears every address and option entry field back to
+  blank/default. Doesn't touch an active throttle assignment or the
+  member list.
+- **Lead locomotive DCC address** — type the lead unit's address, with a
+  **Long address** checkbox next to it.
+- **Assign as Lead** — takes control of that locomotive as the consist's
+  lead unit, and shows whatever's already consisted to it, if anything.
+- **Read Consist** — a genuinely read-only query on the same address
+  field: it never sends a controller-assign command, so it can't
+  interfere with another throttle (a UWT, another JMRI session, etc.)
+  that's already running that engine. Populates the same member list as
+  Assign as Lead, marked read-only; click Assign as Lead afterward if you
+  then want to edit what you saw.
+- **Add locomotive DCC address** — same address + Long address entry,
+  plus **Reverse** and **Respond to F0** flags, to attach another unit to
+  the currently assigned lead via **Add to Consist**. Each added unit
+  automatically has its CV19 cleared (3 writes) and its horn honked 3
+  times (0.5 seconds each) as confirmation — see "Clearing CV19" below.
+  This auto-clear only applies to units added this way, not to the lead
+  itself.
 - **Current consist members** — live list of attached units. The lead
   itself is shown as a non-removable `LEAD: ...` row at the top; real
   members follow.
@@ -105,16 +125,24 @@ that a listener's node ID decodes to a plausible NMRA DCC address (1-127
 short, 1-9999 long) — anything else is assumed to be a non-train device
 and hidden.
 
-### Clearing old NCE consists
+### Clearing CV19
 
-- **Clear old NCE consist** — pick a locomotive (roster or manual address)
-  and click **Clear CV19** to write CV19 = 0 via Program on Main, clearing
-  any leftover NCE-style Decoder Assisted Consist setting from before a
-  migration to the CS-105. Asks for confirmation first, since it's a real
-  write to the layout.
-- On success, it briefly takes the throttle and honks the horn (function
-  F2, the standard horn/whistle assignment) 3 times as an audible "done"
-  confirmation, then releases control again.
+- **Clear CV19 on Entire Consist** — applies to the lead plus every
+  attached member currently shown in the consist member list, one engine
+  at a time: for each, CV19 = 0 is written **3 times in a row** via
+  Program on Main (`CV19_REPEAT_COUNT` in the script), then its horn
+  honks 3 times (0.5 seconds each, `ON_MS` in the script) as
+  confirmation, before moving to the next engine. No
+  address entry needed — it operates on whatever consist is currently
+  built/loaded. Clears any leftover Advanced Consist setting from before
+  a migration to the CS-105.
+- This same clear-and-honk logic (3 writes + 3 honks) also runs
+  **automatically** on each locomotive as it's added via "Add to
+  Consist" — the button above is for the lead (which isn't auto-cleared)
+  or for re-running it across the whole consist at once.
+- The horn honk sends `SET_FN` Traction messages to the target directly,
+  rather than going through `TractionThrottle`'s `VersionedValue`-based
+  function API, which didn't reliably produce an outbound message.
 
 ## Notes
 
