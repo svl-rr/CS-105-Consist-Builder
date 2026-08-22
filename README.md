@@ -31,19 +31,28 @@ walkthroughs below, so they're on hand without leaving JMRI.
 ## How to build a consist
 
 1. Type the lead unit's DCC address into **Lead locomotive DCC address**,
-   and check/uncheck **Long address** to match.
+   and check/uncheck **Long address** to match. Pick a mode from **MU
+   switch** if you also want to set the lead's MU switch position — leave
+   it on `(don't change)` to skip that.
 2. Click **Assign as Lead**. Status will show "Enabled" once JMRI has
    control, and the member list will show a `LEAD: ...` row plus anything
-   already consisted to it.
+   already consisted to it. If an MU switch mode was picked, it's written
+   to the lead's CS-105 virtual node at the same time — see "Setting the
+   MU switch" below. (Using **Read Consist** instead never writes it —
+   that stays read-only.)
 3. Type the next unit's DCC address into **Add locomotive DCC address**
    (and its **Long address** checkbox). Check **Reverse** if it runs
    backwards relative to the lead, and **Respond to F0** if you want it to
-   react to the lead's headlight function too.
+   react to the lead's headlight function too. Pick a mode from **MU
+   switch** if you also want to set that unit's MU switch position as it's
+   added — leave it on `(don't change)` to skip that.
 4. Click **Add to Consist**. It appears in the member list once attached.
    Its CV19 is also automatically cleared (CV19 = 0 sent 3 times via
    Program on Main), and its horn honks 3 times (0.5 seconds each) once
    that's done. This does **not** happen for the lead itself — see "How
-   to clear CV19 on the whole consist" below for that.
+   to clear CV19 on the whole consist" below for that. If an MU switch
+   mode was picked, it's written to that unit's CS-105 virtual node at the
+   same time — see "Setting the MU switch" below.
 5. Repeat steps 3–4 for any further units.
 6. To remove one unit later, select it in the member list and click
    **Remove Selected** (the `LEAD:` row itself can't be removed this way —
@@ -81,6 +90,31 @@ Units added via "Add to Consist" already get this same treatment
 automatically as they're added — this button is for clearing the lead
 too, or for re-running it across the whole consist at once.
 
+## Setting the MU switch
+
+Both **MU switch** dropdowns — next to **Assign as Lead** and next to
+**Add to Consist** — set where that unit's decoder thinks it sits in a
+consist or train, the same setting shown in JMRI's own "Configure" pane
+for a locomotive's LCC node. This is unrelated to CV19 or any DCC CV: it's
+an OpenLCB Configuration Description Information (CDI) variable stored on
+the locomotive's own CS-105 virtual node.
+
+1. Pick a mode: `Solo Unit`, `Coupled at Rear`, `Coupled at Front`, or
+   `Middle Unit`. Leave either dropdown on `(don't change)` (the default)
+   to skip it for that unit.
+2. For the lead, pick a mode before clicking **Assign as Lead**; for any
+   other unit, pick one before clicking **Add to Consist**. Once that
+   unit is assigned/added, its CDI is fetched, the item named "MU switch"
+   is located in it, and the chosen mode is written — independently of,
+   and at the same time as, the CV19 clear that already runs for added
+   units.
+3. **MU switch status** reports progress for both, ending with "MU switch
+   set to \<mode\>." Errors are reported there too, e.g. if that node's CDI
+   has no "MU switch" item (older firmware, or a non-TCS decoder).
+
+Using **Read Consist** instead of **Assign as Lead** never writes the
+lead's MU switch — that path stays genuinely read-only.
+
 ## Features
 
 ### Building a consist
@@ -90,6 +124,10 @@ too, or for re-running it across the whole consist at once.
   member list.
 - **Lead locomotive DCC address** — type the lead unit's address, with a
   **Long address** checkbox next to it.
+- **MU switch** (lead) — dropdown next to **Assign as Lead**; pick a mode
+  to set the lead's MU switch position once assigned, or leave it on
+  `(don't change)` to skip that. Only fires on **Assign as Lead**, never
+  on **Read Consist**. See "Setting the MU switch" above.
 - **Assign as Lead** — takes control of that locomotive as the consist's
   lead unit, and shows whatever's already consisted to it, if anything.
 - **Read Consist** — a genuinely read-only query on the same address
@@ -105,6 +143,9 @@ too, or for re-running it across the whole consist at once.
   times (0.5 seconds each) as confirmation — see "Clearing CV19" below.
   This auto-clear only applies to units added this way, not to the lead
   itself.
+- **MU switch** (add) — dropdown next to **Add to Consist**; pick a mode
+  to set that unit's MU switch position as it's added, or leave it on
+  `(don't change)` to skip that. See "Setting the MU switch" above.
 - **Current consist members** — live list of attached units. The lead
   itself is shown as a non-removable `LEAD: ...` row at the top; real
   members follow.
